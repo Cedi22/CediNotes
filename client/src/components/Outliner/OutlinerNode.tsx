@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NodeItem } from '../../types';
 import { NodeEditor } from './NodeEditor';
-import { ChevronRight, ChevronDown, Zap, Link as LinkIcon, Trash2, Plus, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronDown, Zap, Link as LinkIcon, Trash2, Plus } from 'lucide-react';
 
 interface OutlinerNodeProps {
   node: NodeItem;
@@ -20,6 +20,8 @@ interface OutlinerNodeProps {
   onShowBacklinks: (id: string) => void;
   onDelete: (id: string) => void;
   onSelectWikiLinkNode: (id: string) => void;
+  onCreateWikiNote?: (title: string) => Promise<string>;
+  onAddChildBullet?: (parentId: string) => void;
 }
 
 export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
@@ -38,7 +40,9 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
   onGenerateFlashcards,
   onShowBacklinks,
   onDelete,
-  onSelectWikiLinkNode
+  onSelectWikiLinkNode,
+  onCreateWikiNote,
+  onAddChildBullet
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -50,6 +54,11 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
   const hasChildren = children.length > 0;
   const isExpanded = node.is_expanded === 1 || node.is_expanded === true;
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(node.id);
+  };
+
   return (
     <div
       className="group/node relative flex flex-col transition-all"
@@ -57,14 +66,14 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Node Row */}
-      <div className="flex items-center gap-1.5 py-0.5 px-1 rounded-md hover:bg-slate-850/50 transition-colors">
+      <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded-lg hover:bg-[#13131b] border border-transparent hover:border-red-950/40 transition-colors">
         {/* Toggle Expand / Collapse arrow */}
         <div className="w-4 h-4 flex items-center justify-center shrink-0">
           {hasChildren ? (
             <button
               type="button"
               onClick={() => onToggleExpand(node.id)}
-              className="text-slate-400 hover:text-slate-200 transition-transform p-0.5"
+              className="text-zinc-500 hover:text-red-400 transition-colors p-0.5"
               title={isExpanded ? 'Collapse' : 'Expand'}
             >
               {isExpanded ? (
@@ -100,6 +109,7 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
           onChange={onChange}
           onNavigateVertical={onNavigateVertical}
           onSelectWikiLinkNode={onSelectWikiLinkNode}
+          onCreateWikiNote={onCreateWikiNote}
         />
 
         {/* Hover Action Bar */}
@@ -108,12 +118,24 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
             isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          {/* Flashcard Generator Button (Step 5) */}
+          {/* Quick Add Child Bullet Button */}
+          {onAddChildBullet && (
+            <button
+              type="button"
+              onClick={() => onAddChildBullet(node.id)}
+              className="p-1 text-zinc-400 hover:text-red-300 hover:bg-red-950/40 rounded transition-colors"
+              title="Add sub-bullet"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Flashcard Generator Button */}
           <button
             type="button"
             onClick={() => onGenerateFlashcards(node.id)}
-            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-medium text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors"
-            title="Generate Q&A Flashcard from this Rem & children"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-medium text-amber-300 hover:text-amber-200 bg-amber-950/30 hover:bg-amber-900/40 border border-amber-600/30 rounded transition-colors"
+            title="Generate Q&A Flashcard from this note & children"
           >
             <Zap className="w-3 h-3 text-amber-400" />
             <span className="hidden sm:inline">Card</span>
@@ -123,18 +145,18 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
           <button
             type="button"
             onClick={() => onShowBacklinks(node.id)}
-            className="p-1 text-slate-400 hover:text-sky-300 hover:bg-sky-500/10 rounded transition-colors"
+            className="p-1 text-zinc-400 hover:text-red-300 hover:bg-red-950/30 rounded transition-colors"
             title="View Backlinks"
           >
             <LinkIcon className="w-3.5 h-3.5" />
           </button>
 
-          {/* Delete Button */}
+          {/* Delete Button (deletes parent and any child bullets) */}
           <button
             type="button"
-            onClick={() => onDelete(node.id)}
-            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
-            title="Delete bullet"
+            onClick={handleDeleteClick}
+            className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-colors"
+            title={hasChildren ? 'Delete bullet and its contents' : 'Delete bullet'}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -163,6 +185,8 @@ export const OutlinerNode: React.FC<OutlinerNodeProps> = ({
               onShowBacklinks={onShowBacklinks}
               onDelete={onDelete}
               onSelectWikiLinkNode={onSelectWikiLinkNode}
+              onCreateWikiNote={onCreateWikiNote}
+              onAddChildBullet={onAddChildBullet}
             />
           ))}
         </div>

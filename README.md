@@ -18,14 +18,24 @@ Features
   - Type [[ anywhere to search and insert links to other notes.
   - Backlinks panel automatically displays all incoming references across the brain.
 
-- ⚡ Automated Flashcard Generation & Spaced Repetition (SM-2):
-  - Click the Card (⚡) button on any note to generate Q&A flashcard pairs from the note and its children.
-  - Interactive Study Session Deck with 3D card flips (Spacebar) and SM-2 ratings:
-    - [1] Again
-    - [2] Hard
-    - [3] Good
-    - [4] Easy
+- 📑 Document Tabs & Gemini-Style '...' Menu:
+  - Top tab bar for open documents with '+' new tab button and close tabs.
+  - Three-dot (`...`) dropdown menu on both tabs and sidebar items (just like Gemini chat):
+    - ⭐ **Star / Unstar**: Favorite notes with golden star indicator and a dedicated Starred section.
+    - ✏️ **Rename**: Quickly rename documents via modal or inline edit.
+    - 📋 **Duplicate**: Recursively copy a document and all child bullets.
+    - 📤 **Export as Markdown**: One-click download of the note hierarchy as `.md`.
+    - ⚡ **Flashcards**: Directly extract flashcards from note.
+    - 🤖 **Ask AI**: Direct contextual AI querying.
+    - 🗑️ **Delete**: Delete note and its descendants.
 
+- 🤖 CediNote AI Copilot (Google Gemini & Local LLM):
+  - Built-in AI assistant drawer accessible via the top navigation bar or note context menu.
+  - Connects to either **Google Gemini** (Gemini 2.5 Flash, 1.5 Flash, 1.5 Pro) or **Local LLM** (Ollama, LM Studio, etc. e.g. `llama3.2`, `mistral`, `deepseek-r1`).
+  - Grounded in your active document's hierarchy.
+  - One-click smart action chips: **Summarize**, **Expand Bullets**, **Flashcards**, and **Key Takeaways**.
+  - **Insert into note**: Directly inserts AI-generated points into your document as outliner bullets.
+  - Connection tester in AI Settings with instant feedback.
 ---
 
 Tech Stack

@@ -1,46 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { NodeItem, Breadcrumb } from '../types';
 import { api } from '../services/api';
 
 export function useOutliner() {
   const [nodes, setNodes] = useState<NodeItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [zoomedNodeId, setZoomedNodeId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // Registry of HTML inputs by node ID to control focus precisely
-  const inputRefs = useRef<Map<string, HTMLTextAreaElement | HTMLInputElement>>(new Map());
-  // Save timeout debounce
+  // Input refs for focus management
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+
+  // Debounced update timers map
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const registerInputRef = useCallback((id: string, el: HTMLTextAreaElement | HTMLInputElement | null) => {
-    if (el) {
-      inputRefs.current.set(id, el);
-    } else {
-      inputRefs.current.delete(id);
-    }
-  }, []);
-
-  const focusNode = useCallback((id: string, atStart: boolean = false) => {
-    setActiveNodeId(id);
-    setTimeout(() => {
-      const el = inputRefs.current.get(id);
-      if (el) {
-        el.focus();
-        const pos = atStart ? 0 : el.value.length;
-        if ('setSelectionRange' in el) {
-          el.setSelectionRange(pos, pos);
-        }
-      }
-    }, 20);
-  }, []);
-
-  // Fetch all nodes
+  // Load all nodes
   const loadNodes = useCallback(async () => {
     try {
-      setLoading(true);
       const data = await api.getNodes();
       setNodes(data);
     } catch (err) {
@@ -60,21 +38,45 @@ export function useOutliner() {
       setBreadcrumbs([]);
       return;
     }
-    const crumbs: Breadcrumb[] = [];
+
+    const trail: Breadcrumb[] = [];
     let currentId: string | null = zoomedNodeId;
+
     while (currentId) {
-      const node = nodes.find(n => n.id === currentId);
-      if (!node) break;
-      crumbs.unshift({ id: node.id, content: node.content || 'Untitled' });
-      currentId = node.parent_id;
+      const found = nodes.find(n => n.id === currentId);
+      if (found) {
+        trail.unshift({ id: found.id, content: found.content || 'Untitled' });
+        currentId = found.parent_id;
+      } else {
+        break;
+      }
     }
-    setBreadcrumbs(crumbs);
+
+    setBreadcrumbs(trail);
   }, [zoomedNodeId, nodes]);
 
-  // Find previous visible node in flattened tree order
-  const getFlattenedVisibleOrder = useCallback(() => {
+  const registerInputRef = useCallback((id: string, el: HTMLInputElement | null) => {
+    if (el) {
+      inputRefs.current.set(id, el);
+    } else {
+      inputRefs.current.delete(id);
+    }
+  }, []);
+
+  const focusNode = useCallback((id: string, atStart = false) => {
+    setTimeout(() => {
+      const el = inputRefs.current.get(id);
+      if (el) {
+        el.focus();
+        const pos = atStart ? 0 : el.value.length;
+        el.setSelectionRange(pos, pos);
+      }
+    }, 15);
+  }, []);
+
+  // Flatten currently visible nodes in outliner sequence for up/down keyboard traversal
+  const getFlattenedVisibleOrder = useCallback((): NodeItem[] => {
     const list: NodeItem[] = [];
-    const rootParentId = zoomedNodeId;
 
     function traverse(parentId: string | null) {
       const children = nodes
@@ -147,7 +149,6 @@ export function useOutliner() {
 
       // Replace tempId with server created ID
       setNodes(prev => prev.map(n => n.id === tempId ? created : n));
-      // Re-register ref and refocus
       focusNode(created.id, true);
     } catch (err) {
       console.error('Failed to create sibling node:', err);
@@ -160,20 +161,17 @@ export function useOutliner() {
     const currentNode = nodes.find(n => n.id === currentNodeId);
     if (!currentNode) return;
 
-    // Siblings of current node
+    // Find previous sibling
     const siblings = nodes
       .filter(n => n.parent_id === currentNode.parent_id)
       .sort((a, b) => a.sort_order - b.sort_order);
 
     const currentIndex = siblings.findIndex(s => s.id === currentNodeId);
-    if (currentIndex <= 0) {
-      // No sibling above it to nest under
-      return;
-    }
+    if (currentIndex <= 0) return; // No previous sibling to nest under
 
     const prevSibling = siblings[currentIndex - 1];
 
-    // Find children of prevSibling to calculate new sort_order
+    // Find max sort_order among prevSibling's children
     const prevSiblingChildren = nodes
       .filter(n => n.parent_id === prevSibling.id)
       .sort((a, b) => a.sort_order - b.sort_order);
@@ -206,7 +204,6 @@ export function useOutliner() {
   const handleOutdent = useCallback(async (currentNodeId: string) => {
     const currentNode = nodes.find(n => n.id === currentNodeId);
     if (!currentNode || !currentNode.parent_id) {
-      // Already at root or no parent
       return;
     }
 
@@ -215,7 +212,6 @@ export function useOutliner() {
 
     const grandParentId = parentNode.parent_id;
 
-    // Find parent's next sibling to place currentNode right after parent
     const parentSiblings = nodes
       .filter(n => n.parent_id === grandParentId)
       .sort((a, b) => a.sort_order - b.sort_order);
@@ -248,36 +244,80 @@ export function useOutliner() {
     }
   }, [nodes, focusNode, loadNodes]);
 
-  // 4. Backspace: If node is empty, delete it and focus previous node
-  const handleBackspace = useCallback(async (currentNodeId: string) => {
-    const currentNode = nodes.find(n => n.id === currentNodeId);
-    if (!currentNode) return;
+  // Delete node and ALL its descendant children recursively
+  const handleDeleteNode = useCallback(async (targetId: string) => {
+    const targetNode = nodes.find(n => n.id === targetId);
+    if (!targetNode) return;
 
-    // Check if node has children
-    const hasChildren = nodes.some(n => n.parent_id === currentNodeId);
-    if (hasChildren) {
-      // If it has children, don't delete on single backspace to avoid accidental data loss
-      return;
+    // Collect target ID and all descendant IDs
+    const toDeleteIds = new Set<string>();
+    function collectDescendants(id: string) {
+      toDeleteIds.add(id);
+      const children = nodes.filter(n => n.parent_id === id);
+      for (const c of children) {
+        collectDescendants(c.id);
+      }
+    }
+    collectDescendants(targetId);
+
+    // Find previous visible node to focus
+    const visibleList = getFlattenedVisibleOrder();
+    const currentIndex = visibleList.findIndex(n => n.id === targetId);
+    let prevNode: NodeItem | null = null;
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (!toDeleteIds.has(visibleList[i].id)) {
+        prevNode = visibleList[i];
+        break;
+      }
     }
 
-    const visibleList = getFlattenedVisibleOrder();
-    const currentIndex = visibleList.findIndex(n => n.id === currentNodeId);
-    const prevNode = currentIndex > 0 ? visibleList[currentIndex - 1] : null;
-
-    // Optimistic delete
-    setNodes(prev => prev.filter(n => n.id !== currentNodeId));
+    // Optimistically remove all from state
+    setNodes(prev => prev.filter(n => !toDeleteIds.has(n.id)));
 
     if (prevNode) {
       focusNode(prevNode.id, false);
     }
 
     try {
-      await api.deleteNode(currentNodeId);
+      await api.deleteNode(targetId);
     } catch (err) {
       console.error('Failed to delete node:', err);
       loadNodes();
     }
   }, [nodes, getFlattenedVisibleOrder, focusNode, loadNodes]);
+
+  // 4. Backspace: If node is empty, remove it or promote children
+  const handleBackspace = useCallback(async (currentNodeId: string) => {
+    const currentNode = nodes.find(n => n.id === currentNodeId);
+    if (!currentNode) return;
+
+    // If it has children, promote children up to currentNode's parent
+    const children = nodes.filter(n => n.parent_id === currentNodeId);
+    if (children.length > 0) {
+      // Promote children to parent_id
+      const newParentId = currentNode.parent_id;
+      setNodes(prev => prev.map(n => {
+        if (n.parent_id === currentNodeId) {
+          return { ...n, parent_id: newParentId };
+        }
+        return n;
+      }).filter(n => n.id !== currentNodeId));
+
+      try {
+        for (const child of children) {
+          await api.updateNode(child.id, { parent_id: newParentId });
+        }
+        await api.deleteNode(currentNodeId);
+      } catch (err) {
+        console.error('Failed promoting children on backspace:', err);
+        loadNodes();
+      }
+      return;
+    }
+
+    // Leaf node: delete cleanly
+    await handleDeleteNode(currentNodeId);
+  }, [nodes, handleDeleteNode, loadNodes]);
 
   // Content change with debounced save & [[WikiLink]] sync
   const handleContentChange = useCallback((id: string, newContent: string) => {
@@ -297,9 +337,65 @@ export function useOutliner() {
         console.error('Failed to auto-save node:', err);
         setSavingStatus('idle');
       }
-    }, 400);
+    }, 350);
 
     debounceTimers.current.set(id, timer);
+  }, []);
+
+  // Quick Add Child Bullet
+  const handleAddChildBullet = useCallback(async (parentId: string) => {
+    const parentNode = nodes.find(n => n.id === parentId);
+    if (!parentNode) return;
+
+    const children = nodes
+      .filter(n => n.parent_id === parentId)
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    const lastChild = children[children.length - 1];
+    const newSortOrder = lastChild ? lastChild.sort_order + 100 : 100;
+
+    const tempId = 'node_' + Math.random().toString(36).substring(2, 9);
+    const newNode: NodeItem = {
+      id: tempId,
+      parent_id: parentId,
+      content: '',
+      is_expanded: 1,
+      sort_order: newSortOrder,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    setNodes(prev => [
+      ...prev.map(n => n.id === parentId ? { ...n, is_expanded: 1 } : n),
+      newNode
+    ]);
+
+    focusNode(tempId, true);
+
+    try {
+      const created = await api.createNode({
+        parent_id: parentId,
+        content: '',
+        is_expanded: true,
+        sort_order: newSortOrder
+      });
+
+      setNodes(prev => prev.map(n => n.id === tempId ? created : n));
+      focusNode(created.id, true);
+    } catch (err) {
+      console.error('Failed to add child bullet:', err);
+      loadNodes();
+    }
+  }, [nodes, focusNode, loadNodes]);
+
+  // Rename node immediately (for in-page editing)
+  const handleRenameNode = useCallback(async (id: string, newTitle: string) => {
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, content: newTitle } : n));
+    try {
+      await api.updateNode(id, { content: newTitle });
+    } catch (err) {
+      console.error('Failed to rename node:', err);
+    }
   }, []);
 
   // Toggle node expand/collapse
@@ -362,6 +458,9 @@ export function useOutliner() {
     handleIndent,
     handleOutdent,
     handleBackspace,
+    handleDeleteNode,
+    handleRenameNode,
+    handleAddChildBullet,
     handleContentChange,
     toggleExpand,
     handleNavigateVertical,

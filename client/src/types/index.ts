@@ -4,9 +4,25 @@ export interface NodeItem {
   content: string;
   is_expanded: boolean | number;
   sort_order: number;
+  is_starred?: boolean | number;
   children_count?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AISettings {
+  ai_provider: 'gemini' | 'local';
+  gemini_api_key: string;
+  gemini_model: string;
+  local_endpoint: string;
+  local_model: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
 }
 
 export interface LinkItem {

@@ -97,7 +97,36 @@ function initSchema(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_flashcards_due ON flashcards(due_date);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
+
+  // Ensure is_starred column exists on nodes table
+  try {
+    db.exec(`ALTER TABLE nodes ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0;`);
+  } catch (err) {
+    // Column already exists, ignore
+  }
+
+  // Populate default AI settings if not present
+  const defaultSettings = [
+    ['ai_provider', 'gemini'],
+    ['gemini_api_key', process.env.GEMINI_API_KEY || ''],
+    ['gemini_model', 'gemini-3.8-flash'],
+    ['local_endpoint', 'http://localhost:11434'],
+    ['local_model', 'llama3.2']
+  ];
+
+  for (const [key, val] of defaultSettings) {
+    try {
+      db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`).run(key, val);
+    } catch (e) {
+      // Ignore
+    }
+  }
 }
 
 function seedInitialData(db) {

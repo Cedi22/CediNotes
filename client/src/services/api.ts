@@ -1,4 +1,4 @@
-import { NodeItem, LinkItem, FlashcardItem, FlashcardStats, Breadcrumb } from '../types';
+import { NodeItem, LinkItem, FlashcardItem, FlashcardStats, Breadcrumb, AISettings } from '../types';
 
 const BASE_URL = '/api';
 
@@ -89,6 +89,83 @@ export const api = {
     const res = await fetch(`${BASE_URL}/nodes/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
     return data.results || [];
+  },
+
+  async toggleStarNode(id: string): Promise<NodeItem> {
+    const res = await fetch(`${BASE_URL}/nodes/${id}/star`, {
+      method: 'PATCH'
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to toggle star');
+    return data.node;
+  },
+
+  async duplicateNode(id: string): Promise<NodeItem> {
+    const res = await fetch(`${BASE_URL}/nodes/${id}/duplicate`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to duplicate node');
+    return data.node;
+  },
+
+  // AI API
+  async getAISettings(): Promise<AISettings> {
+    const res = await fetch(`${BASE_URL}/ai/settings`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to fetch AI settings');
+    return data.settings;
+  },
+
+  async saveAISettings(settings: Partial<AISettings>): Promise<AISettings> {
+    const res = await fetch(`${BASE_URL}/ai/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to save AI settings');
+    return data.settings;
+  },
+
+  async testAIConnection(config: Partial<AISettings>): Promise<{ success: boolean; reply: string; message: string }> {
+    const res = await fetch(`${BASE_URL}/ai/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Connection test failed');
+    return data;
+  },
+
+  async chatWithAI(params: {
+    message: string;
+    history?: { role: string; content: string }[];
+    nodeId?: string | null;
+  }): Promise<{ reply: string }> {
+    const res = await fetch(`${BASE_URL}/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'AI generation failed');
+    return data;
+  },
+
+  async runAIAction(params: {
+    action: 'summarize' | 'expand' | 'flashcards' | 'takeaways';
+    nodeId: string;
+  }): Promise<{ reply: string; action: string }> {
+    const res = await fetch(`${BASE_URL}/ai/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'AI action failed');
+    return data;
   },
 
   // Flashcards API

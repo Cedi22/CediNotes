@@ -113,12 +113,13 @@ function createNodesRouter(db) {
       const parent_id = req.body.parent_id !== undefined ? req.body.parent_id : existing.parent_id;
       const is_expanded = req.body.is_expanded !== undefined ? (req.body.is_expanded ? 1 : 0) : existing.is_expanded;
       const sort_order = req.body.sort_order !== undefined ? req.body.sort_order : existing.sort_order;
+      const is_starred = req.body.is_starred !== undefined ? (req.body.is_starred ? 1 : 0) : (existing.is_starred || 0);
 
       db.prepare(`
         UPDATE nodes
-        SET content = ?, parent_id = ?, is_expanded = ?, sort_order = ?, updated_at = datetime('now')
+        SET content = ?, parent_id = ?, is_expanded = ?, sort_order = ?, is_starred = ?, updated_at = datetime('now')
         WHERE id = ?
-      `).run(content, parent_id, is_expanded, sort_order, id);
+      `).run(content, parent_id, is_expanded, sort_order, is_starred, id);
 
       // If content was updated, sync WikiLinks
       if (req.body.content !== undefined) {
@@ -129,6 +130,60 @@ function createNodesRouter(db) {
       res.json({ success: true, node: updatedNode });
     } catch (err) {
       console.error('Error updating node:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Toggle star status
+  router.patch('/:id/star', (req, res) => {
+    try {
+      const { id } = req.params;
+      const node = db.prepare('SELECT * FROM nodes WHERE id = ?').get(id);
+      if (!node) return res.status(404).json({ success: false, error: 'Node not found' });
+      const newStarred = (node.is_starred === 1 || node.is_starred === true) ? 0 : 1;
+      db.prepare("UPDATE nodes SET is_starred = ?, updated_at = datetime('now') WHERE id = ?").run(newStarred, id);
+      const updated = db.prepare('SELECT * FROM nodes WHERE id = ?').get(id);
+      res.json({ success: true, node: updated });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Duplicate node and all its children
+  router.post('/:id/duplicate', (req, res) => {
+    try {
+      const { id } = req.params;
+      const sourceNode = db.prepare('SELECT * FROM nodes WHERE id = ?').get(id);
+      if (!sourceNode) return res.status(404).json({ success: false, error: 'Node not found' });
+
+      function copyNodeRecursive(srcId, targetParentId, sortOffset = 0) {
+        const src = db.prepare('SELECT * FROM nodes WHERE id = ?').get(srcId);
+        const newId = uuidv4();
+        const newContent = targetParentId === src.parent_id && srcId === id
+          ? (src.content ? `${src.content} (Copy)` : 'Copy')
+          : src.content;
+        const newSort = src.sort_order + sortOffset;
+
+        db.prepare(`
+          INSERT INTO nodes (id, parent_id, content, is_expanded, sort_order, is_starred, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(newId, targetParentId, newContent, src.is_expanded, newSort, src.is_starred || 0);
+
+        syncLinksForNode(db, newId, newContent);
+
+        const children = db.prepare('SELECT id FROM nodes WHERE parent_id = ? ORDER BY sort_order ASC').all(srcId);
+        for (const child of children) {
+          copyNodeRecursive(child.id, newId, 0);
+        }
+
+        return newId;
+      }
+
+      const newRootId = copyNodeRecursive(id, sourceNode.parent_id, 25);
+      const duplicated = db.prepare('SELECT * FROM nodes WHERE id = ?').get(newRootId);
+      res.status(201).json({ success: true, node: duplicated });
+    } catch (err) {
+      console.error('Error duplicating node:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
