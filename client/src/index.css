@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-main: #0a0f1d;
+    --bg-surface: #111827;
+    --bg-card: #1e293b;
+    --border-subtle: #334155;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: #f1f5f9;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Outliner tree hierarchy line */
+.outliner-children-indent {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-left: 0.6rem;
+}
+
+.outliner-children-indent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0.75rem;
+  left: 0;
+  width: 1.5px;
+  background-color: rgba(71, 85, 105, 0.4);
+  transition: background-color 0.15s ease;
+}
+
+.outliner-children-indent:hover::before {
+  background-color: rgba(56, 189, 248, 0.5);
+}
+
+/* Bullet styling */
+.bullet-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #94a3b8;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bullet-dot:hover {
+  transform: scale(1.5);
+  background-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+}
+
+.bullet-dot.has-children-folded {
+  background-color: #38bdf8;
+  outline: 2.5px solid rgba(56, 189, 248, 0.35);
+  outline-offset: 2px;
+}
+
+/* WikiLink token styling */
+.wikilink-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  padding: 0 0.35rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wikilink-badge:hover {
+  background: rgba(14, 165, 233, 0.28);
+  border-color: rgba(14, 165, 233, 0.6);
+  text-decoration: underline;
+}
+
+/* Flashcard 3D perspective flip */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
